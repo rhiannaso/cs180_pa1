@@ -177,15 +177,16 @@ void colorPixel(int x, int y, float alpha, float beta, float gamma, shared_ptr<I
         float r = (alpha*t.c1.r)+(beta*t.c2.r)+(gamma*t.c3.r);
         float g = (alpha*t.c1.g)+(beta*t.c2.g)+(gamma*t.c3.g);
         float b = (alpha*t.c1.b)+(beta*t.c2.b)+(gamma*t.c3.b);
-        // float r = 255;
-        // float g = 0;
-        // float b = 0;
-        // cout << "PIXEL COLORS" << endl;
-        // cout << "X: " << x << endl;
-        // cout << "Y: " << y << endl;
-        if (zBuf[x][y] < currZ) {
-            image->setPixel(x, y, r, g, b);
-            zBuf[x][y] = currZ;
+        if (colorMode == 1) { // Depth coloring
+            if (zBuf[x][y] < currZ) {
+                image->setPixel(x, y, r, g, b);
+                zBuf[x][y] = currZ;
+            }
+        }
+        if (colorMode == 2) { // Outline coloring
+            if (alpha <= 0.1 || beta <= 0.1 || gamma <= 0.1) {
+                image->setPixel(x, y, r, g, b);
+            }
         }
     }
 }
@@ -203,64 +204,38 @@ void calcBary(struct Triangle t, int oldX, int oldY, shared_ptr<Image> image, fl
     colorPixel(oldX, oldY, alpha, beta, gamma, image, t);
 }
 
-// g_width = input width; g_height = input height
-// r_right = w/h; r_left = -w/h
-// r_bottom = -1; r_top = 1
-// xw = current x; yw = current y (in world)
 void transformCoords(float xw, float yw, float pixels[]) {
-    // cout << "XW: " << xw << endl;
-    // cout << "YW: " << yw << endl;
     float c = (g_width-1)/(r_right-r_left);
     float d = c * r_left * -1;
     float xp = (c * xw) + d;
     pixels[0] = xp;
-
     float e = (g_height-1)/(r_top-r_bottom);
     float f = e * r_bottom * -1;
     float yp = (e * yw) + f;
     pixels[1] = yp;
-    // cout << "XP: " << xp << endl;
-    // cout << "YP: " << yp << endl;
 }
 
 void setVertProps(struct Vertex *v, float x, float y, float z) {
-    // cout << "Z: " << z << endl;
     v->x = x;
     v->y = y;
     v->z = z;
 }
 
-void setColorProps(struct Color *c, float r, float g, float b) {
-    // cout << "RED: " << r << endl;
-    // cout << "GREEN: " << g << endl;
-    // cout << "BLUE: " << b << endl;
-    c->r = r;
-    c->g = g;
-    c->b = b;
+Color setColorProps(float r, float g, float b) {
+    struct Color c;
+    c.r = r;
+    c.g = g;
+    c.b = b;
+    return c;
 }
 
 void handleColors(struct Triangle *t) {
-    //cout << "HANDLING COLORS" << endl;
-    struct Color c1;
-    struct Color c2;
-    struct Color c3;
-    if (colorMode == 1) { // depth
-        float scalar = scaleIntensity(t->v1.z);
-        // cout << "Z1: " << t->v1.z << endl;
-        // cout << "SCALAR 1: " << scalar << endl;
-        setColorProps(&c1, (global_r*scalar), (global_g*scalar), (global_b*scalar));
-        scalar = scaleIntensity(t->v2.z);
-        // cout << "Z2: " << t->v2.z << endl;
-        // cout << "SCALAR 2: " << scalar << endl;
-        setColorProps(&c2, (global_r*scalar), (global_g*scalar), (global_b*scalar));
-        scalar = scaleIntensity(t->v3.z);
-        // cout << "Z3: " << t->v3.z << endl;
-        // cout << "SCALAR 3: " << scalar << endl;
-        setColorProps(&c3, (global_r*scalar), (global_g*scalar), (global_b*scalar));
-    }
-    t->c1 = c1;
-    t->c2 = c2;
-    t->c3 = c3;
+    float scalar = scaleIntensity(t->v1.z);
+    t->c1 = setColorProps((global_r*scalar), (global_g*scalar), (global_b*scalar));
+    scalar = scaleIntensity(t->v2.z);
+    t->c2 = setColorProps((global_r*scalar), (global_g*scalar), (global_b*scalar));
+    scalar = scaleIntensity(t->v3.z);
+    t->c3 = setColorProps((global_r*scalar), (global_g*scalar), (global_b*scalar));
 }
 
 Vertex handleSetup(unsigned int ind) {
@@ -283,10 +258,8 @@ struct Triangle createTriangle(unsigned int ind1, unsigned int ind2, unsigned in
 
 void drawTriangle(struct Triangle t, shared_ptr<Image> image) {
     calcBounds(t, &bb);
-
     // Calculate area of triangle
     float tArea = ((t.v2.x-t.v1.x)*(t.v3.y-t.v1.y)) - ((t.v3.x-t.v1.x)*(t.v2.y-t.v1.y));
-
 	// Draw bounding box
 	for(int y = bb.ymin; y <= bb.ymax; ++y) {
 		for(int x = bb.xmin; x <= bb.xmax; ++x) {
